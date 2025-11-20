@@ -185,6 +185,10 @@
             transform: translateX(5px);
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
         }
+
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.5);
+        }
     </style>
 </head>
 
@@ -197,6 +201,9 @@
                     <p class="mb-0">Complete Trip Management System</p>
                 </div>
                 <div class="col-md-4 text-end">
+                    <button class="btn btn-light mb-2" onclick="showTripPassModal()">
+                        <i class="fas fa-id-card"></i> Generate Trip Passes
+                    </button>
                     <button class="btn btn-light mb-2" onclick="generateCompletePDF()">
                         <i class="fas fa-file-pdf"></i> Complete Report
                     </button>
@@ -289,8 +296,16 @@
                                     </select>
                                 </div>
                                 <div class="col-md-3 mb-3">
+                                    <label class="form-label">Student Type *</label>
+                                    <select class="form-select" id="studentType" onchange="toggleClassField()" required>
+                                        <option value="">Select Type</option>
+                                        <option value="School">School Student</option>
+                                        <option value="Outside">Outside Student</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3 mb-3" id="classFieldDiv">
                                     <label class="form-label">Class *</label>
-                                    <select class="form-select" id="studentClass" required>
+                                    <select class="form-select" id="studentClass">
                                         <option value="">Select Class</option>
                                         <option value="Nursery">Nursery</option>
                                         <option value="KG">KG</option>
@@ -304,14 +319,6 @@
                                         <option value="8th">8th</option>
                                         <option value="9th">9th</option>
                                         <option value="10th">10th</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-4 mb-3">
-                                    <label class="form-label">Student Type *</label>
-                                    <select class="form-select" id="studentType" required>
-                                        <option value="">Select Type</option>
-                                        <option value="School">School Student</option>
-                                        <option value="Outside">Outside Student</option>
                                     </select>
                                 </div>
                                 <div class="col-md-4 mb-3">
@@ -570,6 +577,52 @@
         </div>
     </div>
 
+    <!-- Trip Pass Modal -->
+    <div class="modal fade" id="tripPassModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header"
+                    style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white;">
+                    <h5 class="modal-title"><i class="fas fa-id-card"></i> Generate Trip Passes</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> Trip passes will be generated only for participants who have
+                        <strong>completed their payment</strong>.
+                    </div>
+                    <form id="tripPassForm">
+                        <div class="mb-3">
+                            <label class="form-label">Trip Date *</label>
+                            <input type="date" class="form-control" id="tripDate" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Participants</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="includeStudents" checked>
+                                <label class="form-check-label" for="includeStudents">
+                                    Include Students (<span id="paidStudentsCount">0</span> paid)
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="includeTeachers" checked>
+                                <label class="form-check-label" for="includeTeachers">
+                                    Include Teachers (<span id="paidTeachersCount">0</span> paid)
+                                </label>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="generateTripPasses()">
+                        <i class="fas fa-download"></i> Generate Passes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
     <script>
         let students = [];
@@ -577,7 +630,6 @@
         let editingStudentIndex = -1;
         let editingTeacherIndex = -1;
 
-        // Load data on page load
         window.onload = function () {
             loadData();
             updateStatistics();
@@ -604,10 +656,30 @@
             localStorage.setItem('daisyTripTeachers', JSON.stringify(teachers));
         }
 
-        // Student Functions
+        function toggleClassField() {
+            const studentType = document.getElementById('studentType').value;
+            const classField = document.getElementById('studentClass');
+            const classFieldDiv = document.getElementById('classFieldDiv');
+
+            if (studentType === 'Outside') {
+                classFieldDiv.style.display = 'none';
+                classField.value = 'N/A';
+                classField.removeAttribute('required');
+            } else if (studentType === 'School') {
+                classFieldDiv.style.display = 'block';
+                classField.value = '';
+                classField.setAttribute('required', 'required');
+            } else {
+                classFieldDiv.style.display = 'block';
+                classField.value = '';
+                classField.removeAttribute('required');
+            }
+        }
+
         function addStudent(event) {
             event.preventDefault();
 
+            const studentType = document.getElementById('studentType').value;
             const amountType = document.getElementById('paymentAmountType').value;
             let amount = 0;
 
@@ -621,8 +693,8 @@
                 id: Date.now(),
                 name: document.getElementById('studentName').value,
                 gender: document.getElementById('studentGender').value,
-                class: document.getElementById('studentClass').value,
-                type: document.getElementById('studentType').value,
+                class: studentType === 'Outside' ? 'N/A' : document.getElementById('studentClass').value,
+                type: studentType,
                 amount: amount,
                 status: document.getElementById('paymentStatus').value,
                 notes: document.getElementById('studentNotes').value
@@ -662,6 +734,8 @@
             document.getElementById('studentForm').reset();
             document.getElementById('customAmountDiv').style.display = 'none';
             document.getElementById('paymentAmount').required = false;
+            document.getElementById('classFieldDiv').style.display = 'block';
+            document.getElementById('studentClass').removeAttribute('required');
             editingStudentIndex = -1;
         }
 
@@ -669,8 +743,17 @@
             const student = students[index];
             document.getElementById('studentName').value = student.name;
             document.getElementById('studentGender').value = student.gender;
-            document.getElementById('studentClass').value = student.class;
             document.getElementById('studentType').value = student.type;
+
+            if (student.type === 'Outside') {
+                document.getElementById('classFieldDiv').style.display = 'none';
+                document.getElementById('studentClass').value = 'N/A';
+                document.getElementById('studentClass').removeAttribute('required');
+            } else {
+                document.getElementById('classFieldDiv').style.display = 'block';
+                document.getElementById('studentClass').value = student.class;
+                document.getElementById('studentClass').setAttribute('required', 'required');
+            }
 
             if (student.amount === 3000) {
                 document.getElementById('paymentAmountType').value = '3000';
@@ -686,7 +769,6 @@
             document.getElementById('studentNotes').value = student.notes || '';
             editingStudentIndex = index;
 
-            // Switch to students tab and scroll to form
             document.getElementById('students-tab').click();
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
@@ -774,7 +856,6 @@
             }
         }
 
-        // Teacher Functions
         function addTeacher(event) {
             event.preventDefault();
 
@@ -854,7 +935,6 @@
             document.getElementById('teacherNotes').value = teacher.notes || '';
             editingTeacherIndex = index;
 
-            // Switch to teachers tab and scroll to form
             document.getElementById('teachers-tab').click();
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
@@ -919,9 +999,7 @@
             }
         }
 
-        // Statistics
         function updateStatistics() {
-            // Student Statistics
             const totalStudents = students.length;
             const schoolStudents = students.filter(s => s.type === 'School').length;
             const outsideStudents = students.filter(s => s.type === 'Outside').length;
@@ -938,7 +1016,6 @@
             document.getElementById('femaleStudents').textContent = femaleStudents;
             document.getElementById('totalStudentAmount').textContent = `Rs ${totalStudentAmount.toLocaleString()}`;
 
-            // Teacher Statistics
             const totalTeachers = teachers.length;
             const maleTeachers = teachers.filter(t => t.gender === 'Male').length;
             const femaleTeachers = teachers.filter(t => t.gender === 'Female').length;
@@ -952,7 +1029,165 @@
             document.getElementById('totalTeacherAmount').textContent = `Rs ${totalTeacherAmount.toLocaleString()}`;
         }
 
-        // PDF Functions
+        function showTripPassModal() {
+            const paidStudents = students.filter(s => s.status === 'Completed').length;
+            const paidTeachers = teachers.filter(t => t.status === 'Completed').length;
+
+            if (paidStudents === 0 && paidTeachers === 0) {
+                alert('No participants with completed payment found! Please ensure at least one student or teacher has completed their payment.');
+                return;
+            }
+
+            document.getElementById('paidStudentsCount').textContent = paidStudents;
+            document.getElementById('paidTeachersCount').textContent = paidTeachers;
+
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('tripDate').value = today;
+
+            const modal = new bootstrap.Modal(document.getElementById('tripPassModal'));
+            modal.show();
+        }
+
+        function generateTripPasses() {
+            const tripDate = document.getElementById('tripDate').value;
+            const includeStudents = document.getElementById('includeStudents').checked;
+            const includeTeachers = document.getElementById('includeTeachers').checked;
+
+            if (!tripDate) {
+                alert('Please select a trip date!');
+                return;
+            }
+
+            const paidStudents = students.filter(s => s.status === 'Completed');
+            const paidTeachers = teachers.filter(t => t.status === 'Completed');
+
+            let participants = [];
+            if (includeStudents) {
+                participants = participants.concat(paidStudents.map(s => ({ ...s, participantType: s.type })));
+            }
+            if (includeTeachers) {
+                participants = participants.concat(paidTeachers.map(t => ({ ...t, participantType: 'Teacher' })));
+            }
+
+            if (participants.length === 0) {
+                alert('No participants selected or no one has completed payment!');
+                return;
+            }
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            const formatDate = new Date(tripDate).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+
+            // Calculate passes per page (4 passes per page in 2x2 grid)
+            const passesPerPage = 4;
+            const passWidth = 90;
+            const passHeight = 130;
+            const margin = 10;
+
+            participants.forEach((participant, index) => {
+                const pageIndex = Math.floor(index / passesPerPage);
+                const positionOnPage = index % passesPerPage;
+
+                // Add new page if needed
+                if (index > 0 && positionOnPage === 0) {
+                    doc.addPage();
+                }
+
+                // Calculate position (2x2 grid)
+                const col = positionOnPage % 2;
+                const row = Math.floor(positionOnPage / 2);
+                const x = margin + (col * (passWidth + margin));
+                const y = margin + (row * (passHeight + margin));
+
+                // Draw pass border
+                doc.setLineWidth(0.5);
+                doc.setDrawColor(40, 167, 69);
+                doc.rect(x, y, passWidth, passHeight);
+
+                // Header
+                doc.setFillColor(40, 167, 69);
+                doc.rect(x, y, passWidth, 20, 'F');
+
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(12);
+                doc.setFont(undefined, 'bold');
+                doc.text('Daisy Public High School', x + passWidth / 2, y + 8, { align: 'center' });
+                doc.setFontSize(9);
+                doc.text(' 673-K, Gulistan Colony Faisalabad', x + passWidth / 2, y + 14, { align: 'center' });
+
+                // Trip Pass Title
+                doc.setFillColor(32, 201, 151);
+                doc.rect(x, y + 20, passWidth, 10, 'F');
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(11);
+                doc.setFont(undefined, 'bold');
+                doc.text('TRIP PASS', x + passWidth / 2, y + 27, { align: 'center' });
+
+                // Pass Details - Modified section
+                let yPos = y + 38;
+                doc.setTextColor(0, 0, 0);
+                doc.setFontSize(10);
+                doc.setFont(undefined, 'bold');
+
+                // Pass Number centered
+                doc.text(`Pass No: TP-2025-${String(index + 1).padStart(4, '0')}`, x + passWidth / 2, yPos, { align: 'center' });
+
+                // Trip Details
+                yPos += 15;
+                doc.setFillColor(40, 167, 69);
+                doc.rect(x + 5, yPos - 5, passWidth - 10, 8, 'F');
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(9);
+                doc.setFont(undefined, 'bold');
+                doc.text('TRIP DETAILS', x + passWidth / 2, yPos, { align: 'center' });
+
+                yPos += 10;
+                doc.setTextColor(0, 0, 0);
+                doc.setFontSize(8);
+                doc.setFont(undefined, 'normal');
+
+                // From and To in same row
+                doc.setFont(undefined, 'bold');
+                doc.text('From:', x + 5, yPos);
+                doc.setFont(undefined, 'normal');
+                doc.text('Faisalabad', x + 20, yPos);
+
+                doc.setFont(undefined, 'bold');
+                doc.text('To:', x + 50, yPos);  // Moved to same row
+                doc.setFont(undefined, 'normal');
+                doc.text('Rana Resort', x + 60, yPos);  // Moved to same row
+
+                yPos += 8;  // Only one row spacing needed
+                doc.setFont(undefined, 'bold');
+                doc.text('Date:', x + 5, yPos);
+                doc.setFont(undefined, 'normal');
+                doc.setFontSize(7);
+                doc.text(formatDate, x + 20, yPos);
+
+                yPos += 10;
+                doc.setTextColor(0, 0, 0);
+                doc.setFontSize(8);
+                doc.setFont(undefined, 'normal');
+
+
+
+                // Footer
+                yPos = y + passHeight - 8;
+                doc.setFontSize(6);
+                doc.setTextColor(200, 0, 0);
+                doc.text('* Non-transferable. Must be carried during trip.', x + passWidth / 2, yPos, { align: 'center' });
+            });
+
+            bootstrap.Modal.getInstance(document.getElementById('tripPassModal')).hide();
+            doc.save(`Daisy_Trip_Passes_${tripDate}.pdf`);
+            showNotification(`${participants.length} trip passes generated successfully!`, 'success');
+        }
+
         function generateCompletePDF() {
             if (students.length === 0 && teachers.length === 0) {
                 alert('No data to generate report!');
@@ -962,7 +1197,6 @@
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
 
-            // Title
             doc.setFontSize(20);
             doc.setTextColor(40, 167, 69);
             doc.text('Daisy Trip 2025', 105, 20, { align: 'center' });
@@ -974,29 +1208,24 @@
 
             let yPos = 45;
 
-            // Students Section
             if (students.length > 0) {
                 doc.setFontSize(16);
                 doc.setTextColor(40, 167, 69);
                 doc.text('STUDENTS SECTION', 105, yPos, { align: 'center' });
                 yPos += 10;
 
-                // Student Statistics
                 doc.setFontSize(10);
                 doc.setTextColor(0, 0, 0);
                 doc.text(`Total Students: ${students.length}`, 20, yPos);
                 doc.text(`School: ${students.filter(s => s.type === 'School').length}`, 70, yPos);
                 doc.text(`Outside: ${students.filter(s => s.type === 'Outside').length}`, 110, yPos);
-                doc.text(`Male: ${students.filter(s => s.gender === 'Male').length}`, 150, yPos);
-                doc.text(`Female: ${students.filter(s => s.gender === 'Female').length}`, 180, yPos);
                 yPos += 7;
 
                 const totalStudentAmount = students.filter(s => s.status === 'Completed').reduce((sum, s) => sum + s.amount, 0);
                 doc.text(`Total Collection (Completed): Rs ${totalStudentAmount.toLocaleString()}`, 20, yPos);
                 yPos += 10;
 
-                // Group by class
-                const classes = ['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'];
+                const classes = ['Nursery', 'KG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', 'N/A'];
 
                 classes.forEach(cls => {
                     const classStudents = students.filter(s => s.class === cls);
@@ -1036,7 +1265,6 @@
                 });
             }
 
-            // Teachers Section
             if (teachers.length > 0) {
                 if (yPos > 200) {
                     doc.addPage();
@@ -1048,12 +1276,9 @@
                 doc.text('TEACHERS SECTION', 105, yPos, { align: 'center' });
                 yPos += 10;
 
-                // Teacher Statistics
                 doc.setFontSize(10);
                 doc.setTextColor(0, 0, 0);
                 doc.text(`Total Teachers: ${teachers.length}`, 20, yPos);
-                doc.text(`Male: ${teachers.filter(t => t.gender === 'Male').length}`, 70, yPos);
-                doc.text(`Female: ${teachers.filter(t => t.gender === 'Female').length}`, 120, yPos);
                 yPos += 7;
 
                 const totalTeacherAmount = teachers.filter(t => t.status === 'Completed').reduce((sum, t) => sum + t.amount, 0);
@@ -1083,7 +1308,6 @@
                 yPos = doc.lastAutoTable.finalY + 10;
             }
 
-            // Grand Total
             if (yPos > 260) {
                 doc.addPage();
                 yPos = 20;
@@ -1119,7 +1343,6 @@
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
 
-            // Title
             doc.setFontSize(20);
             doc.setTextColor(40, 167, 69);
             doc.text('Daisy Trip 2025', 105, 20, { align: 'center' });
@@ -1131,7 +1354,6 @@
 
             let yPos = 45;
 
-            // Students Section
             if (schoolStudents.length > 0) {
                 doc.setFontSize(12);
                 doc.setTextColor(40, 167, 69);
@@ -1185,7 +1407,6 @@
                 });
             }
 
-            // Teachers Section
             if (teachers.length > 0) {
                 if (yPos > 200) {
                     doc.addPage();
@@ -1234,14 +1455,14 @@
                 yPos = 20;
             }
 
-            yPos += 10;
+            yPos += 20;
             doc.setFontSize(10);
             doc.setTextColor(0, 0, 0);
-            doc.text('_________________________', 20, yPos + 20);
-            doc.text('Teacher/Supervisor Signature', 20, yPos + 26);
-
-            doc.text('_________________________', 110, yPos + 20);
-            doc.text('Date', 110, yPos + 26);
+            doc.text('_______________________', 30, yPos);
+            doc.text('_______________________', 130, yPos);
+            yPos += 7;
+            doc.text('Coordinator Signature', 30, yPos);
+            doc.text('Principal Signature', 130, yPos);
 
             doc.save('Daisy_Trip_2025_Attendance_Sheet.pdf');
             showNotification('Attendance Sheet Generated Successfully!', 'success');
@@ -1251,12 +1472,16 @@
             const alertDiv = document.createElement('div');
             alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3`;
             alertDiv.style.zIndex = '9999';
+            alertDiv.style.minWidth = '300px';
             alertDiv.innerHTML = `
                 ${message}
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             `;
             document.body.appendChild(alertDiv);
-            setTimeout(() => alertDiv.remove(), 3000);
+
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 3000);
         }
     </script>
 </body>
